@@ -4,6 +4,7 @@ import datetime
 
 import six
 import xlrd
+import os
 
 from csvkit import table
 from csvkit.exceptions import XLSDataError
@@ -125,31 +126,34 @@ def xls2csv(f, **kwargs):
     Convert an Excel .xls file to csv.
     """
     book = xlrd.open_workbook(file_contents=f.read())
+    sheets = book.sheet_names()
+    fname = os.path.splitext(f.name)[0];
 
-    if 'sheet' in kwargs:
-        sheet = book.sheet_by_name(kwargs['sheet'])
-    else:
-        sheet = book.sheet_by_index(0)
+    for name in sheets:
+        outputfname = fname + "_" + name.replace(" ", "") + ".csv"
+        of = open(outputfname,'w')
+        sheet = book.sheet_by_name(name)
+        tab = table.Table() 
 
-    tab = table.Table() 
+        for i in range(sheet.ncols):
+            # Trim headers
+            column_name = sheet.col_values(i)[0]
 
-    for i in range(sheet.ncols):
-        # Trim headers
-        column_name = sheet.col_values(i)[0]
+            values = sheet.col_values(i)[1:]
+            types = sheet.col_types(i)[1:]
 
-        values = sheet.col_values(i)[1:]
-        types = sheet.col_types(i)[1:]
+            column_type = determine_column_type(types)
+            t, normal_values = NORMALIZERS[column_type](values, datemode=book.datemode)
 
-        column_type = determine_column_type(types)
-        t, normal_values = NORMALIZERS[column_type](values, datemode=book.datemode)
+            column = table.Column(i, column_name, normal_values, normal_type=t)
+            tab.append(column)
 
-        column = table.Column(i, column_name, normal_values, normal_type=t)
-        tab.append(column)
+        o = six.StringIO()
+        output = tab.to_csv(o)
+        output = o.getvalue()
+        o.close()
+        of.write(output)
+        of.close()
 
-    o = six.StringIO()
-    output = tab.to_csv(o)
-    output = o.getvalue()
-    o.close()
-
-    return output 
+    return "Completed"
 

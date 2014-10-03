@@ -4,6 +4,7 @@ import datetime
 
 from openpyxl.reader.excel import load_workbook
 import six
+import os
 
 from csvkit import CSVKitWriter 
 from csvkit.typeinference import NULL_TIME
@@ -43,52 +44,54 @@ def xlsx2csv(f, output=None, **kwargs):
     """
     streaming = True if output else False
 
-    if not streaming:
-        output = six.StringIO()
-
-    writer = CSVKitWriter(output)
 
     book = load_workbook(f, use_iterators=True, data_only=True)
+    sheets = book.get_sheet_names()
+    fname = os.path.splitext(f.name)[0];
 
-    if 'sheet' in kwargs:
-        sheet = book.get_sheet_by_name(kwargs['sheet'])
-    else:
-        sheet = book.get_active_sheet()
+    for name in sheets:
+        outputfname = fname + "_" + name.replace(" ", "") + ".csv"
+        of = open(outputfname,'w')
+        sheet = book.get_sheet_by_name(name)
+        if not streaming:
+            output = six.StringIO()
+            writer = CSVKitWriter(output)
 
-    for i, row in enumerate(sheet.iter_rows()):
-        if i == 0:
-            writer.writerow([c.value for c in row]) 
-            continue
+        for i, row in enumerate(sheet.iter_rows()):
+            if i == 0:
+                writer.writerow([c.value for c in row]) 
+                continue
 
-        out_row = []
+            out_row = []
 
-        for c in row:
-            value = c.value
+            for c in row:
+                value = c.value
 
-            if value.__class__ is datetime.datetime:
-                # Handle default XLSX date as 00:00 time 
-                if value.date() == datetime.date(1904, 1, 1) and not has_date_elements(c):
-                    value = value.time() 
+                if value.__class__ is datetime.datetime:
+                    # Handle default XLSX date as 00:00 time 
+                    if value.date() == datetime.date(1904, 1, 1) and not has_date_elements(c):
+                        value = value.time() 
 
-                    value = normalize_datetime(value)
-                elif value.time() == NULL_TIME:
-                    value = value.date()
-                else:
-                    value = normalize_datetime(value)
-            elif value.__class__ is float:
-                if value % 1 == 0:
-                    value = int(value)
+                        value = normalize_datetime(value)
+                    elif value.time() == NULL_TIME:
+                        value = value.date()
+                    else:
+                        value = normalize_datetime(value)
+                elif value.__class__ is float:
+                    if value % 1 == 0:
+                        value = int(value)
 
-            if value.__class__ in (datetime.datetime, datetime.date, datetime.time):
-                value = value.isoformat()
+                if value.__class__ in (datetime.datetime, datetime.date, datetime.time):
+                    value = value.isoformat()
 
-            out_row.append(value)
+                out_row.append(value)
 
-        writer.writerow(out_row)
+            writer.writerow(out_row)
 
-    if not streaming:
-        data = output.getvalue()
-        return data
+        if not streaming:
+            data = output.getvalue()
+            of.write(data)
+            of.close()            
 
     # Return empty string when streaming
     return ''
